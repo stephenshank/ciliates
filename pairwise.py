@@ -22,7 +22,7 @@ from Bio import AlignIO
 
 def get_sequences(subunit):
     path = os.path.join('data', 'Ciliate_%s.fasta' % subunit)
-    return SeqIO.parse(path, 'fasta')
+    return list(SeqIO.parse(path, 'fasta'))
 
 
 def make_sequence_files(subunit):
@@ -71,19 +71,20 @@ def get_metrics_from_filename(filename):
 
 def get_all_metrics(subunit):
     sequence_ids = [sequence.id for sequence in get_sequences(subunit)]
-    all_names = []
+    first_ids = []
+    second_ids = []
     all_identity = []
     all_gaps = []
     for id1, id2 in it.combinations(sequence_ids, 2):
         filename = '%s__%s__ALIGNED.fasta' % (id1, id2)
         percent_identity, fraction_of_gaps = get_metrics_from_filename(filename)
-        all_names.append('%s__%s' % (id1, id2))
+        first_ids.append(id1)
+        second_ids.append(id2)
         all_identity.append(percent_identity)
         all_gaps.append(fraction_of_gaps)
     metrics_df = pd.DataFrame({
-        'pair': all_names, 'identity': all_identity, 'gaps': all_gaps
+        'id1': first_ids, 'id2': second_ids, 'identity': all_identity, 'gaps': all_gaps
     })
-    metrics_df['dist'] = np.sqrt(metrics_df.gaps**2+(1-metrics_df.identity)**2)
     metrics_df['origin'] = '%s pairwise' % subunit
     return metrics_df
 
