@@ -13,14 +13,14 @@ import itertools as it
 import numpy as np
 import pandas as pd
 from scipy.cluster.hierarchy import linkage, fcluster
-from scipy.stats import rankdata
 from Bio import SeqIO, AlignIO
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-
 import pairwise
 
+
+round_threshold = lambda threshold: str(round(100*threshold))
 
 def get_aligned_filename(subunit, nclust, method, index):
     return '%s_%d_%s_%d_ALIGNED.fasta' % (subunit, nclust, method, index)
@@ -49,9 +49,10 @@ def get_cluster_assignments(subunit, nclust, method='average'):
         subprocess.call(alignment_command, shell=True)
     
 
-def get_all_metrics(subunit, index):
+def get_all_metrics(subunit, threshold, index):
+    rounded_threshold = round_threshold(threshold)
     filename = '%s__%d__ALIGNED.fasta' % (subunit, index)
-    alignment_path = os.path.join('data', 'split', filename)
+    alignment_path = os.path.join('data', 'split', rounded_threshold, filename)
     alignment = AlignIO.read(alignment_path, 'fasta')
     gaps = []
     identities = []
@@ -79,11 +80,15 @@ def single_linkage_clustering(subunit, threshold):
     
 
 def cluster_and_align(subunit, threshold):
+    rounded_threshold = round_threshold(threshold)
+    data_directory = os.path.join('data', 'split', rounded_threshold)
+    if not os.path.exists(data_directory):
+        os.makedirs(data_directory)
     clusters = single_linkage_clustering(subunit, threshold)
     sequences = list(pairwise.get_sequences(subunit))
     for i, cluster in enumerate(set(clusters)):
         filename = '%s__%d.fasta' % (subunit, i)
-        unaligned_path = os.path.join('data', 'split', filename)
+        unaligned_path = os.path.join(data_directory, filename)
         indices = np.arange(len(clusters))[clusters==cluster]
         if len(indices) > 1:
             cluster_sequences = []
@@ -92,7 +97,7 @@ def cluster_and_align(subunit, threshold):
             with open(unaligned_path, 'w') as output_file:
                 SeqIO.write(cluster_sequences, output_file, 'fasta')
             aligned_filename = '%s__%d__ALIGNED.fasta' % (subunit, i)
-            aligned_path = os.path.join('data', 'split', aligned_filename)
+            aligned_path = os.path.join(data_directory, aligned_filename)
             alignment_command = 'mafft %s > %s' % (unaligned_path, aligned_path)
             subprocess.call(alignment_command, shell=True)
 
@@ -109,4 +114,4 @@ def create_replicated_clusters():
 
 
 if __name__ == '__main__':
-    cluster_and_align('alpha', .6)
+    cluster_and_align('beta', .6)
