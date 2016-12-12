@@ -47,12 +47,19 @@ def get_cluster_assignments(subunit, nclust, method='average'):
         aligned_path = os.path.join('data', 'split', aligned_filename)
         alignment_command = 'mafft %s > %s' % (path, aligned_path)
         subprocess.call(alignment_command, shell=True)
-    
+
+
+def directory_from_threshold(threshold):
+    rounded_identity = round_threshold(threshold['identity'])
+    rounded_gap = round_threshold(threshold['gaps'])
+    directory_name = '%s_%s' % (rounded_identity, rounded_gap)
+    return directory_name
+
 
 def get_all_metrics(subunit, threshold, index):
-    rounded_threshold = round_threshold(threshold)
+    directory_name = directory_from_threshold(threshold)
     filename = '%s__%d__ALIGNED.fasta' % (subunit, index)
-    alignment_path = os.path.join('data', 'split', rounded_threshold, filename)
+    alignment_path = os.path.join('data', 'split', directory_name, filename)
     alignment = AlignIO.read(alignment_path, 'fasta')
     gaps = []
     identities = []
@@ -64,31 +71,36 @@ def get_all_metrics(subunit, threshold, index):
     return pd.DataFrame({'gaps':gaps, 'identity':identities, 'origin':origin})
 
 
-def single_linkage_clustering(subunit, threshold):
+def single_linkage_clustering(subunit, threshold, variable='both'):
     sequences = [sequence.id for sequence in pairwise.get_sequences(subunit)]
     number_of_sequences = len(sequences)
     metrics = pairwise.get_all_metrics(subunit)
-    metrics['above_threshold'] = metrics.identity > threshold
+    if variable == 'both':
+        correct_identity = metrics.identity > threshold['identity']
+        correct_gaps = metrics.gaps < threshold['gaps']
+        metrics['cluster_variable'] = correct_identity & correct_gaps
+    elif variable == 'identity':
+        metrics['cluster_variable'] = metrics.identity > threshold
     current_assignment = np.arange(number_of_sequences)
-    for _, row in metrics[metrics['above_threshold']].iterrows():
+    for _, row in metrics[metrics['cluster_variable']].iterrows():
         index1 = sequences.index(row.id1)
         index2 = sequences.index(row.id2)
         assignment1 = current_assignment[index1]
         assignment2 = current_assignment[index2]        
         current_assignment[current_assignment==assignment1] = assignment2
     return current_assignment
-    
 
+    
 def cluster_and_align(subunit, threshold):
-    rounded_threshold = round_threshold(threshold)
-    data_directory = os.path.join('data', 'split', rounded_threshold)
-    if not os.path.exists(data_directory):
-        os.makedirs(data_directory)
+    directory_name = directory_from_threshold(threshold)
+    directory_path = os.path.join('data', 'split', directory_name)
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
     clusters = single_linkage_clustering(subunit, threshold)
     sequences = list(pairwise.get_sequences(subunit))
     for i, cluster in enumerate(set(clusters)):
         filename = '%s__%d.fasta' % (subunit, i)
-        unaligned_path = os.path.join(data_directory, filename)
+        unaligned_path = os.path.join(directory_path, filename)
         indices = np.arange(len(clusters))[clusters==cluster]
         if len(indices) > 1:
             cluster_sequences = []
@@ -97,7 +109,7 @@ def cluster_and_align(subunit, threshold):
             with open(unaligned_path, 'w') as output_file:
                 SeqIO.write(cluster_sequences, output_file, 'fasta')
             aligned_filename = '%s__%d__ALIGNED.fasta' % (subunit, i)
-            aligned_path = os.path.join(data_directory, aligned_filename)
+            aligned_path = os.path.join(directory_path, aligned_filename)
             alignment_command = 'mafft %s > %s' % (unaligned_path, aligned_path)
             subprocess.call(alignment_command, shell=True)
 
@@ -107,11 +119,33 @@ def get_stats(subunit, index):
     sns.distplot(metrics.identity.dropna())
     plt.show()
 
-
-def create_replicated_clusters():
-    get_cluster_assignments('alpha', 3, 'ward')
-    get_cluster_assignments('beta', 2, 'ward')
+    
+def make_and_plot(subunit, threshold):
+    cluster_and_align(subunit, threshold)
+    directory_name = directory_from_threshold(threshold)
+    data_directory = os.path.join('data', 'split', directory_name)
+    files = [file for file in os.listdir(data_directory) if 'ALIGNED' in file and subunit in file]
+    for file in files:
+        path = os.path.join(data_directory, file)
+        alignment = AlignIO.read(path, 'fasta')
+        desired_sequences = [sequence.id for sequence in alignment if 'Contig' in sequence.id]
+        contains_desired_sequence = any(desired_sequences)
+        enough_members = len(alignment) > 2
+        if contains_desired_sequence and enough_members:
+            _, index, _ = file.split('__')
+            index = int(index)
+            print(subunit, index, ': contains', ', '.join(desired_sequences), len(alignment), 'total members')
+            metrics = get_all_metrics(subunit, threshold, index)
+            fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+            metrics.identity.dropna().plot(kind='hist', ax=axs[0])
+            axs[0].set_title('Percent identity')
+            axs[0].set_xlim([0, 1])
+            metrics.gaps.dropna().plot(kind='hist', ax=axs[1])
+            axs[1].set_title('Gap proportion')
+            axs[1].set_xlim([0, 1])
+            plt.show()
 
 
 if __name__ == '__main__':
-    cluster_and_align('beta', .6)
+    make_and_plot('alpha', {'identity':.6, 'gaps':.4})
+    pass
