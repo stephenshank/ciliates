@@ -7,4 +7,5 @@ After cloning this repository and making it your current directory, make sure to
 ```sh
 pip install -r requirements.txt
 python pairwise.py -s -a
+python multiple.py
 ```

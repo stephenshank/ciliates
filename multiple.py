@@ -120,11 +120,12 @@ def get_stats(subunit, index):
     plt.show()
 
     
-def make_and_plot(subunit, threshold):
+def make_and_plot(subunit, threshold, show=False):
     cluster_and_align(subunit, threshold)
     directory_name = directory_from_threshold(threshold)
     data_directory = os.path.join('data', 'split', directory_name)
-    files = [file for file in os.listdir(data_directory) if 'ALIGNED' in file and subunit in file]
+    valid_file = lambda file: 'ALIGNED' in file and subunit in file
+    files = [file for file in os.listdir(data_directory) if valid_file(file)]
     for file in files:
         path = os.path.join(data_directory, file)
         alignment = AlignIO.read(path, 'fasta')
@@ -134,7 +135,8 @@ def make_and_plot(subunit, threshold):
         if contains_desired_sequence and enough_members:
             _, index, _ = file.split('__')
             index = int(index)
-            print(subunit, index, ': contains', ', '.join(desired_sequences), len(alignment), 'total members')
+            print(subunit, index, ': contains', end='')
+            print(', '.join(desired_sequences), len(alignment), 'total members')
             metrics = get_all_metrics(subunit, threshold, index)
             fig, axs = plt.subplots(1, 2, figsize=(10, 5))
             metrics.identity.dropna().plot(kind='hist', ax=axs[0])
@@ -147,5 +149,5 @@ def make_and_plot(subunit, threshold):
 
 
 if __name__ == '__main__':
-    make_and_plot('alpha', {'identity':.6, 'gaps':.4})
-    pass
+    cluster_and_align('alpha', {'identity':.6, 'gaps':.4})
+    cluster_and_align('beta', {'identity':.6, 'gaps':.4})

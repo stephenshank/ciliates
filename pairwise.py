@@ -66,26 +66,49 @@ def get_metrics_from_filename(filename):
     alignment = AlignIO.read(path, 'fasta')
     first_sequence = alignment[0].seq
     second_sequence = alignment[1].seq
-    return get_metrics(first_sequence, second_sequence)
+    first_length = len(str(first_sequence).replace('-', ''))
+    second_length = len(str(second_sequence).replace('-', ''))
+    percent_identity, gap_fraction = get_metrics(first_sequence, second_sequence)
+    pairwise_alignment_metrics = {
+        'percent_identity': percent_identity,
+        'gap_fraction': gap_fraction,
+        'first_length': first_length,
+        'second_length': second_length
+    }
+    return pairwise_alignment_metrics
 
 
 def get_all_metrics(subunit):
     sequence_ids = [sequence.id for sequence in get_sequences(subunit)]
     first_ids = []
     second_ids = []
+    first_lengths = []
+    second_lengths = []
     all_identity = []
     all_gaps = []
     for id1, id2 in it.combinations(sequence_ids, 2):
         filename = '%s__%s__ALIGNED.fasta' % (id1, id2)
-        percent_identity, fraction_of_gaps = get_metrics_from_filename(filename)
+        alignment_metrics = get_metrics_from_filename(filename)
         first_ids.append(id1)
         second_ids.append(id2)
-        all_identity.append(percent_identity)
-        all_gaps.append(fraction_of_gaps)
+        first_lengths.append(alignment_metrics['first_length'])
+        second_lengths.append(alignment_metrics['second_length'])
+        all_identity.append(alignment_metrics['percent_identity'])
+        all_gaps.append(alignment_metrics['gap_fraction'])
     metrics_df = pd.DataFrame({
-        'id1': first_ids, 'id2': second_ids, 'identity': all_identity, 'gaps': all_gaps
+        'id1': first_ids,
+        'id2': second_ids,
+        'length1': first_lengths,
+        'length2': second_lengths,
+        'identity': all_identity,
+        'gaps': all_gaps
     })
     metrics_df['origin'] = '%s pairwise' % subunit
+    metrics_df['status'] = 'okay'
+    isoforms = (metrics_df.identity == 1) & (metrics_df.gaps > 0)
+    duplicates = (metrics_df.identity == 1) & (metrics_df.gaps == 0)
+    metrics_df.loc[isoforms, 'status'] = 'isoform'
+    metrics_df.loc[duplicates, 'status'] = 'duplicate'
     return metrics_df
 
 
