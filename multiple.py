@@ -9,6 +9,7 @@ Created on Mon Dec  5 10:29:36 2016
 import os
 import subprocess
 import itertools as it
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -148,6 +149,36 @@ def make_and_plot(subunit, threshold, show=False):
             plt.show()
 
 
+def fasta_renamer(filename, threshold):
+    threshold_directory = directory_from_threshold(threshold)
+    directory = os.path.join('data', 'split', threshold_directory)
+    path = os.path.join(directory, filename)
+    names = {}
+    alignment = AlignIO.read(path, 'fasta')
+    for i, sequence in enumerate(alignment):
+        names[i] = sequence.id
+        sequence.id = str(i)
+    phylip_filename = filename.split('.')[0] + '.phylip'
+    phylip_path = os.path.join(directory, phylip_filename)
+    with open(phylip_path, 'w') as phylip_file:
+        AlignIO.write(alignment, phylip_file, 'phylip')
+    pickle_filename = filename.split('.')[0] + '.pkl'
+    pickle_path = os.path.join(directory, pickle_filename)
+    with open(pickle_path, 'wb') as pickle_file:
+        pickle.dump(names, pickle_file)
+
+
+def fasta_to_phylip(threshold):
+    threshold_directory = directory_from_threshold(threshold)
+    directory = os.path.join('data', 'split', threshold_directory)
+    is_alignment = lambda file: 'ALIGNED' in file and file[-5:] == 'fasta'
+    files = [file for file in os.listdir(directory) if is_alignment(file)]
+    for filename in files:
+        fasta_renamer(filename, threshold)    
+
+
 if __name__ == '__main__':
-    cluster_and_align('alpha', {'identity':.6, 'gaps':.4})
-    cluster_and_align('beta', {'identity':.6, 'gaps':.4})
+    threshold = {'identity':.6, 'gaps':.4}
+    cluster_and_align('alpha', threshold)
+    cluster_and_align('beta', threshold)
+    fasta_to_phylip(threshold)
