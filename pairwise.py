@@ -14,30 +14,36 @@ import os
 import itertools as it
 import subprocess
 
-import numpy as np
 import pandas as pd
 from Bio import SeqIO
 from Bio import AlignIO
 
+from tools import get_list
+from tools import get_metrics
+from tools import remove_badchars
 
-def get_sequences(subunit):
-    path = os.path.join('data', 'Ciliate_%s.fasta' % subunit)
-    return list(SeqIO.parse(path, 'fasta'))
+
+def get_pairwise_filename(record1, record2, aligned=''):
+    id1 = remove_badchars(record1.id)
+    id2 = remove_badchars(record2.id)
+    if aligned:
+        aligned = '__ALIGNED'
+    filename = '%s__%s%s.fasta' % (id1, id2, aligned)
+    return filename
 
 
-def make_sequence_files(subunit):
-    print('Splitting main %s file into multiple pairwise files...' % subunit)
-    sequences = get_sequences(subunit)
+def make_sequence_files():
+    print('Splitting protein sequences into pairwise files...')
+    sequences = get_list('InitialProtein')
     for sequence1, sequence2 in it.combinations(sequences, 2):
-        id1 = sequence1.id
-        id2 = sequence2.id
-        pairwise_filename = '%s__%s.fasta' % (id1, id2)
+        pairwise_filename = get_pairwise_filename(sequence1, sequence2)
         pairwise_path = os.path.join('data', 'pairwise', pairwise_filename)
         with open(pairwise_path, 'w') as output_file:
             SeqIO.write([sequence1, sequence2], output_file, 'fasta')
 
 
 def perform_alignments():
+    print('Performing all pairwise alignments...')
     all_pairwise_files = os.listdir(os.path.join('data','pairwise'))
     already_aligned = lambda file: 'ALIGNED' in file
     desired_pairwise_files = it.filterfalse(already_aligned, all_pairwise_files)
@@ -48,17 +54,6 @@ def perform_alignments():
         output_path = os.path.join('data', 'pairwise', output_filename)
         alignment_command = 'mafft %s > %s' % (input_path, output_path)
         subprocess.call(alignment_command, shell=True)
-
-
-def get_metrics(first_sequence, second_sequence):
-    first_array = np.array(list(str(first_sequence)), dtype='<U1')
-    second_array = np.array(list(str(second_sequence)), dtype='<U1')
-    gaps = (first_array == '-') | (second_array == '-')
-    not_gaps = ~gaps
-    percent_identity = sum((first_array==second_array) & not_gaps)/sum(not_gaps)
-    total_length = len(first_array)
-    fraction_of_gaps = sum(gaps)/total_length
-    return percent_identity, fraction_of_gaps
 
 
 def get_metrics_from_filename(filename):
@@ -78,19 +73,19 @@ def get_metrics_from_filename(filename):
     return pairwise_alignment_metrics
 
 
-def get_all_metrics(subunit):
-    sequence_ids = [sequence.id for sequence in get_sequences(subunit)]
+def get_all_metrics():
+    sequences = get_list('InitialProtein')
     first_ids = []
     second_ids = []
     first_lengths = []
     second_lengths = []
     all_identity = []
     all_gaps = []
-    for id1, id2 in it.combinations(sequence_ids, 2):
-        filename = '%s__%s__ALIGNED.fasta' % (id1, id2)
+    for sequence1, sequence2 in it.combinations(sequences, 2):
+        filename = get_pairwise_filename(sequence1, sequence2, aligned=True)
         alignment_metrics = get_metrics_from_filename(filename)
-        first_ids.append(id1)
-        second_ids.append(id2)
+        first_ids.append(sequence1.id)
+        second_ids.append(sequence2.id)
         first_lengths.append(alignment_metrics['first_length'])
         second_lengths.append(alignment_metrics['second_length'])
         all_identity.append(alignment_metrics['percent_identity'])
@@ -103,7 +98,6 @@ def get_all_metrics(subunit):
         'identity': all_identity,
         'gaps': all_gaps
     })
-    metrics_df['origin'] = '%s pairwise' % subunit
     metrics_df['status'] = 'okay'
     isoforms = (metrics_df.identity == 1) & (metrics_df.gaps > 0)
     duplicates = (metrics_df.identity == 1) & (metrics_df.gaps == 0)
@@ -113,22 +107,8 @@ def get_all_metrics(subunit):
 
 
 if __name__ == '__main__':
-    from argparse import ArgumentParser
-    parser = ArgumentParser()
-    parser.add_argument('-s', '--subunit', metavar='SUBUNIT', dest='subunit',
-                        nargs='?', const='both',
-                        help='Subunit to process (alpha or beta)')
-    parser.add_argument('-a', '--align', dest='align', nargs='?', const=True,
-                        help='Perform pairwise alignments.', default=False)
-    args = parser.parse_args()
-    
-    subunit = args.subunit
-    if subunit:
-        if subunit == 'alpha' or subunit =='both':
-            make_sequence_files('alpha')
-        if subunit == 'beta' or subunit =='both':
-            make_sequence_files('beta')
-    
-    align = args.align
-    if align:
-        perform_alignments()
+    pairwise_dir = os.path.join('data', 'pairwise')
+    if not os.path.exists(pairwise_dir):
+        os.makedirs(pairwise_dir)
+    make_sequence_files()
+    perform_alignments()

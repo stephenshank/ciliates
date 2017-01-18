@@ -19,3 +19,5 @@ bash clean.sh
 `data` - Contains all data for the analysis. Subdirectories are described below.
 
 `data/initial` - Contains initial dataset, consisting of protein/nucleotide sequences and subunit memberships.
+
+`data/pairwise` - Contains pairs of protein sequences (pre- and post-alignment).

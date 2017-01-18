@@ -25,6 +25,8 @@ directories = {
     'InitialProtein': os.path.join(data_dir, initial_dir),
 }
 
+remove_badchars = lambda string: string.replace('|', '_').replace('.', '_')
+
 
 def get_path(key):
     directory = directories[key]
