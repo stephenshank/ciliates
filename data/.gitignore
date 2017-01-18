@@ -1,5 +1,4 @@
 *.fasta
-*.phylip
-*.txt
-*.pkl
-*.new
+*.tar.gz
+initial
+pairwise
