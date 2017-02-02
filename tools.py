@@ -12,6 +12,7 @@ import json
 import numpy as np
 from Bio import SeqIO
 
+
 data_dir = 'data'
 initial_dir = 'initial'
 
