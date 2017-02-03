@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 
 import pairwise
 from tools import get_list
+from tools import get_dictionary
 from tools import subunit_dictionary
 
 
@@ -176,19 +177,60 @@ def run_phyml():
         lambda file: re.match(prottest_regex, file),
         os.listdir(prottest_output_dir)
     )
+    clusters = []
     for prottest_filename in prottest_filenames:
         prottest_path = os.path.join(prottest_output_dir, prottest_filename)
         with open(prottest_path, 'r') as prottest_file:
             line = prottest_file.readlines()[421]
         model_list = line.split()[-1].split('+')
         cluster = int(prottest_filename.split('_')[-1].split('.')[0])
+        clusters.append(cluster)
         model = model_list[0]
         gamma_supported = len(model_list) > 1
         gamma_arg = '-c 4 ' if gamma_supported else ''
         info = (alignment_path(cluster, extension='phylip'), model, gamma_arg)
         command = 'phyml3 -i %s -d aa -m %s %s-b 100' % info
         subprocess.call(command, shell=True)
-    
+    json_filename = 'clusters.json'
+    json_path = os.path.join(prottest_output_dir, json_filename)
+    with open(json_path, 'w') as json_file:
+        json.dump(clusters, json_file)
+
+
+def write_codon_alignments():
+    directory = os.path.join('data', 'clusters')
+    clusters_path = os.path.join(directory, 'clusters.json')
+    with open(clusters_path, 'r') as json_file:
+        clusters = json.load(json_file)
+    all_nucleotide_records = get_dictionary('InitialNucleotide')
+    for cluster in clusters:
+        nucleotide_records = []
+        amino_acid_records = []
+        id_map_filename = 'cluster_%d__ALIGNED.json' % cluster
+        id_map_path = os.path.join(directory, id_map_filename)
+        with open(id_map_path, 'r') as json_file:
+            id_map = json.load(json_file)
+        phylip_filename = 'cluster_%d__ALIGNED.phylip' % cluster
+        phylip_path = os.path.join(directory, phylip_filename)
+        phylip_records = SeqIO.parse(phylip_path, 'phylip')
+        for record in phylip_records:
+            amino_acid_records.append(record)
+            nucleotide_id = id_map[record.id]
+            nucleotide_record = all_nucleotide_records[nucleotide_id]
+            nucleotide_record.id = record.id
+            nucleotide_record.description = ''
+            nucleotide_records.append(nucleotide_record)
+        nucleotide_filename = 'cluster_%d__nucleotide.fasta' % cluster
+        nucleotide_path = os.path.join(directory, nucleotide_filename)
+        SeqIO.write(nucleotide_records, nucleotide_path, 'fasta')
+        protein_filename = 'cluster_%d_NumID__ALIGNED.fasta' % cluster
+        protein_path = os.path.join(directory, protein_filename)
+        SeqIO.write(amino_acid_records, protein_path, 'fasta')
+        codon_filename = 'cluster_%d_CODON__ALIGNED.fasta' % cluster
+        codon_path = os.path.join(directory, codon_filename)
+        info = (protein_path, nucleotide_path, codon_path)
+        command = 'pal2nal %s %s -codontable 6 -output fasta > %s' % info
+        subprocess.call(command, shell=True)
 
 
 if __name__ == '__main__':
@@ -201,3 +243,4 @@ if __name__ == '__main__':
     cluster_info()
     run_prottest()
     run_phyml()
+    write_codon_alignments()
